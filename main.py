@@ -53,7 +53,6 @@ def load_data(tickers, start, end):
         return pd.DataFrame()
     
     # yfinance를 통해 데이터 다운로드 (Close: 종가 기준)
-    # yfinance 최신 버전의 반환 형태를 고려하여 전처리
     data = yf.download(tickers, start=start, end=end)
     
     if data.empty:
@@ -83,36 +82,39 @@ if selected_tickers:
         # 결측치 처리 (휴장일 등의 이유로 빈 데이터를 이전 날짜 데이터로 채움)
         df = df.ffill().dropna()
 
-        # 데이터프레임의 컬럼명(티커)을 알아보기 쉬운 회사 이름으로 변경
-        ticker_to_name = {v: k for k, v in default_tickers.items()}
-        # yfinance 반환 시 다중 인덱스 등이 생길 수 있으므로 매핑 적용
-        df.columns = [ticker_to_name.get(col, col) for col in df.columns]
+        # 🔥 에러 해결 부분: 결측치 처리 후 데이터가 다 지워져서 0줄이 되었는지 한 번 더 확인합니다!
+        if df.empty:
+            st.warning("선택하신 기간에 유효한 주가 데이터가 없습니다. 주말이나 휴일인지 확인하고 시작일/종료일을 더 길게 설정해주세요.")
+        else:
+            # 데이터프레임의 컬럼명(티커)을 알아보기 쉬운 회사 이름으로 변경
+            ticker_to_name = {v: k for k, v in default_tickers.items()}
+            # yfinance 반환 시 다중 인덱스 등이 생길 수 있으므로 매핑 적용
+            df.columns = [ticker_to_name.get(col, col) for col in df.columns]
 
-        # 수익률 계산: (현재 가격 / 시작일 가격 - 1) * 100
-        # 이를 통해 시작 가격이 서로 다른 주식들도 같은 비율(%) 기준으로 공평하게 비교할 수 있습니다.
-        returns_df = (df / df.iloc[0] - 1) * 100
+            # 수익률 계산: (현재 가격 / 시작일 가격 - 1) * 100
+            returns_df = (df / df.iloc[0] - 1) * 100
 
-        # --- 차트 그리기 ---
-        st.subheader(f"📊 누적 수익률 비교 ({start_date} ~ {end_date})")
-        st.write("선택한 기간 동안 각 주식을 시작일에 샀을 경우의 누적 수익률(%)입니다.")
-        
-        # Plotly를 이용한 반응형 꺾은선형 차트
-        fig = px.line(
-            returns_df,
-            x=returns_df.index,
-            y=returns_df.columns,
-            labels={"value": "누적 수익률 (%)", "Date": "날짜", "variable": "종목명"}
-        )
-        # 마우스를 올렸을 때 모든 종목의 수치를 세로선과 함께 한 번에 보여주도록 설정
-        fig.update_layout(hovermode="x unified", yaxis_tickformat='.2f')
-        st.plotly_chart(fig, use_container_width=True)
+            # --- 차트 그리기 ---
+            st.subheader(f"📊 누적 수익률 비교 ({start_date} ~ {end_date})")
+            st.write("선택한 기간 동안 각 주식을 시작일에 샀을 경우의 누적 수익률(%)입니다.")
+            
+            # Plotly를 이용한 반응형 꺾은선형 차트
+            fig = px.line(
+                returns_df,
+                x=returns_df.index,
+                y=returns_df.columns,
+                labels={"value": "누적 수익률 (%)", "Date": "날짜", "variable": "종목명"}
+            )
+            # 마우스를 올렸을 때 모든 종목의 수치를 세로선과 함께 한 번에 보여주도록 설정
+            fig.update_layout(hovermode="x unified", yaxis_tickformat='.2f')
+            st.plotly_chart(fig, use_container_width=True)
 
-        # --- 데이터 표 보여주기 ---
-        st.subheader("📋 최근 종가 데이터 (원/달러)")
-        # 최신 날짜가 위로 오도록 역순 정렬하여 최근 5일 치만 출력
-        st.dataframe(df.tail(5).sort_index(ascending=False))
+            # --- 데이터 표 보여주기 ---
+            st.subheader("📋 최근 종가 데이터 (원/달러)")
+            # 최신 날짜가 위로 오도록 역순 정렬하여 최근 5일 치만 출력
+            st.dataframe(df.tail(5).sort_index(ascending=False))
 
     else:
-        st.warning("선택한 기간의 데이터가 없습니다. 주말이나 휴장일인지 확인하고 날짜를 다시 설정해주세요.")
+        st.warning("데이터를 가져오지 못했습니다. 날짜 구간을 변경하거나 잠시 후 다시 시도해주세요.")
 else:
     st.info("왼쪽 사이드바에서 비교할 주식을 하나 이상 선택해주세요.")
